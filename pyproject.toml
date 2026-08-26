@@ -1,0 +1,19 @@
+# Style configuration for the published analysis code.
+#
+# `ruff check` is the contract and it is clean. The formatter is deliberately not
+# run: reformatting all fifty modules would make what is published textually
+# different from what produced the paper's numbers, for no gain a reader benefits
+# from.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E, W, F only. `I` (import sorting) is left out on purpose: two modules depend on
+# import order and say so in a comment. structured_baselines.py fixes the BLAS thread
+# count before numpy loads, because XGBoost's hist method reduces gradient histograms
+# in thread order and a different thread count chooses different split points. The
+# figure modules import matplotlib before the house style, because the style module
+# sets rcParams as it loads. Sorting either would change output.
+select = ["E", "W", "F"]

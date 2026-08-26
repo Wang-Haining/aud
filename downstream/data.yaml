@@ -1,0 +1,66 @@
+# The pre-specified analysis rule: the six-point scale and how it collapses, the join key,
+# the model set, the subgroups the screen may examine, and the parity thresholds.
+# Loaded by stats_core.load_yaml_with_scope(path, scope). Paths are relative to the
+# analysis root on the cluster.
+
+study: medace_aud
+seed: 42
+
+labels_6: [Definitely Yes, Probably Yes, Uncertain, Probably No, Definitely No, Not Enough Data]
+aud_pos: [Definitely Yes, Probably Yes]
+aud_neg: [Definitely No, Probably No]
+abstain: [Uncertain, Not Enough Data]
+
+join_key: omop_person_id        # ALWAYS; never gpids_era_* (eras drift)
+
+paths:
+  roster:   resources/patient_roster.csv          # omop_person_id, gpids_era_b, has_aud_icd, n_notes, ndepth_maaz_rating
+  canonical_panel: output/canonical_panel.csv     # 499 patients x 11 models; frozen v1 for the original 9, corrected-config source for 2 additions
+  features: output/features_structured.parquet     # person_id, age, gender, race, ethnicity, zip, county, inst_num, Charlson*, CCI
+  sdoh:     output/sdoh/aggregate_recoded.parquet  # 499/499; labor-force recode + positive-only disability field
+  geo:      output/geo/adi_ruca.parquet            # build via probe/probe_geo.py when parity/geo in scope
+  gold:     resources/gold_reference_v2.csv             # derived by downstream/npj/ref_standard.py from the rating files; 487-patient analysis cohort
+
+raters:
+  llm:  {source: output/canonical_panel.csv, col: label_canonical, model_col: model, model: aud_qwen36_27b}
+  maaz: {source: resources/patient_roster.csv,        col: ndepth_maaz_rating}
+  icd:  {source: resources/patient_roster.csv,        col: has_aud_icd, positive: "1"}
+  gold: {source: resources/gold_reference_v2.csv, col: gold_label, sensitivity_col: gold_label, version: v2_2026-08-11}
+
+# The eleven models. The last two are marked corrected config: they were run after the
+# context-handling defect was repaired, and the marker keeps that visible in every table.
+models:
+  Qwen3.6-27B:         {source: output/canonical_panel.csv, model: aud_qwen36_27b,      col: label_canonical, kappa_w_vs_maaz: 0.880, leading: true}
+  GLM-5.2:             {source: output/canonical_panel.csv, model: aud_glm52,          col: label_canonical, kappa_w_vs_maaz: 0.873, leading: true, exclude_primary: true}
+  Nemotron-3-120B-FP8: {source: output/canonical_panel.csv, model: aud_nemotron_fp8,     col: label_canonical, kappa_w_vs_maaz: 0.869, leading: true}
+  GPT-OSS-120B:        {source: output/canonical_panel.csv, model: aud,                  col: label_canonical, kappa_w_vs_maaz: 0.867, leading: true}
+  Nemotron-Llama-49B:  {source: output/canonical_panel.csv, model: aud_nemotron_llama,  col: label_canonical, kappa_w_vs_maaz: 0.859, leading: true}
+  GPT-OSS-20B:         {source: output/canonical_panel.csv, model: aud_gptoss_20b,       col: label_canonical, kappa_w_vs_maaz: 0.857, leading: true}
+  Gemma4-31B:          {source: output/canonical_panel.csv, model: aud_gemma4,           col: label_canonical, kappa_w_vs_maaz: 0.785, leading: false}
+  Mistral-3.2-24B:     {source: output/canonical_panel.csv, model: aud_mistral32_24b,    col: label_canonical, kappa_w_vs_maaz: 0.677, leading: false}
+  Llama-3.3-70B:       {source: output/canonical_panel.csv, model: aud_llama33_70b,      col: label_canonical, kappa_w_vs_maaz: 0.555, leading: false}
+  DeepSeek-V4-Flash-0731 [corrected config]: {source: output/canonical_panel.csv, model: aud_deepseek_v4_flash_0731, col: label_canonical, kappa_w_vs_maaz: 0.815273, leading: false, pipeline_config: corrected config}
+  Llama-4-Scout [corrected config]:          {source: output/canonical_panel.csv, model: aud_llama4_scout,              col: label_canonical, kappa_w_vs_maaz: 0.737499, leading: false, pipeline_config: corrected config}
+
+subgroups:
+  demographic: {race: [White, Black, Others], gender: [Man, Woman, Others],
+                ethnicity: [Hispanic, Others], age_bin: ["18-49", "50-64", "65+"]}
+  clinical:    {cci_bin: ["0-1", "2-3", "4+"]}
+  sdoh:        [labor_force_status, housing, food_security, insurance, transportation_barrier, incarceration_history]
+  population_characteristics: [disability_status]
+  geo:         [adi_quintile, ruca_category]     # pending geo build
+  site:        care_site_id
+
+parity:
+  rule_version: npj_precision_v1_2026-08-06
+  n_boot: 5000
+  ci_level: 0.95
+  equivalence_ci_level: 0.90
+  informative_ci_half_width: 0.10
+  equivalence_margin_abs: 0.05
+  multiplicity: benjamini-hochberg-within-rater-metric
+
+# ---- scopes (deep-merged onto root) ----
+ref_maaz: {reference: maaz, label: "interim (agreement, not accuracy)"}
+ref_gold: {reference: gold, label: "performance against the reference standard"}
+sensitivity_defonly: {aud_pos: [Definitely Yes], aud_neg: [Definitely No]}

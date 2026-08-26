@@ -1,0 +1,27 @@
+# Protected data. None of it is in this repository and none of it may be added.
+# These are the directories the code reads and writes when it runs on the cluster;
+# they are named here so that a repository initialised in the analysis directory
+# cannot stage them.
+resources/
+chart/
+output/
+linkage/
+downstream/npj/out/
+downstream/npj_*_outputs/
+downstream/npj_baselines/
+downstream/analysis_staging/
+*.parquet
+*.pkl
+*.xlsx
+
+# Products. Rebuilt from the data, which is not here.
+*.pdf
+*.png
+
+# Python
+__pycache__/
+*.pyc
+.ruff_cache/
+.venv/
+
+.DS_Store
