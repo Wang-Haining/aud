@@ -1,7 +1,7 @@
 # AUD phenotyping: analysis code
 
-Analysis code for *Language model phenotyping recovers alcohol use disorder missed by
-diagnosis codes across health systems* (submitted).
+Analysis code for the manuscript *Language model phenotyping recovers alcohol use
+disorder missed by diagnosis codes across health systems*.
 
 Start with [`provenance.md`](provenance.md): it maps each result in the paper to the
 script that produced it. [`SKILL.md`](SKILL.md) is the same map written for an agent.
@@ -53,7 +53,3 @@ CC BY 4.0 ([`LICENSE-docs`](LICENSE-docs)).
 
 `downstream/npj/nature_style.py` is a third-party helper, retained unmodified; its
 origin is recorded in its header.
-
-## Manuscript
-
-[Wang-Haining/aud-llm-manuscript](https://github.com/Wang-Haining/aud-llm-manuscript)
