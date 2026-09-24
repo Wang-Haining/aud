@@ -65,7 +65,22 @@ def cat(x):
 NARROW_SIGNAL = r"^(K70|571\.0|571\.1|571\.2|571\.3)"
 
 
-def build(collapse=0, narrow=0, acamp=0, ever_rx=0, u_source="parquet"):
+# The note extract for a sampled patient was requested around that patient's index
+# date, which is the first AUD code for the patients who carry one and the first
+# cirrhosis code for the rest. The cells whose window therefore follows the AUD code
+# are estimated from the never-coded cell of the same stratum and period, so that
+# every theta is estimated from charts read on a window near t0. The window position
+# by cell is measured in downstream/npj/f01_anchor_audit_by_cell.py.
+# ANCHOR_DEFAULT is the specification this sampler fits. build() does not take it as its
+# own default: build() is the shared cohort builder that icd_fairness.py, site_figure_data.py,
+# build_table1.py and the Figure 1 and Figure 4 scripts all call, and the restriction removes
+# 90 charts from the validated arm. Those callers must keep all 423. A caller that mirrors a
+# fit passes the anchor that fit recorded.
+ANCHOR_DEFAULT = "asuncoded"
+
+
+def build(collapse=0, narrow=0, acamp=0, ever_rx=0, u_source="parquet",
+          anchor="keep"):
     # The reference standard comes from ref_standard.build(), the one place it is derived.
     # Until 13 August this function assembled its own labels from resources/chart_scores.csv
     # and from patient_roster.csv:ndepth_maaz_rating. That path read a 499-patient roster, so
@@ -190,6 +205,44 @@ def build(collapse=0, narrow=0, acamp=0, ever_rx=0, u_source="parquet"):
         n_moved = int(((u.notna()) & (u != m["U"])).sum())
         m["U"] = u.fillna(m["U"]).astype(int)
         print("u_source=roster: %d sampled patients moved cell" % n_moved)
+
+    # The note extract runs 540 days either side of the roster index date, and that index
+    # date is the first AUD code for the sampled patients who carry one and the first
+    # cirrhosis code for the others (resources/index_dates.csv, index_source F10.x for 231
+    # of the 487 analysed charts). In the two cells where the AUD code falls after t0 the
+    # extract therefore sits almost entirely after t0: 18.4 per cent of dated notes are at
+    # or before t0 in the alcohol-coded-only stratum and 5.6 per cent in the record-silent
+    # stratum, against 58.9 and 32.1 per cent in the never-coded cells of the same strata,
+    # and the median index offset is +204 and +504 days. The reviewer therefore read text
+    # selected around the event that places those patients in their cell, so theta there is
+    # an upper bound. downstream/npj/f01_anchor_audit_by_cell.py measures it.
+    #
+    # Uth is the sampling status the theta cells use. It equals U unless a restriction is
+    # asked for, so anchor="keep" reproduces the unrestricted fit exactly.
+    m["Uth"] = m["U"]
+    if anchor != "keep":
+        hit = m["val"].to_numpy(bool) & (m["S"].to_numpy(int) >= 1) \
+            & (m["U"].to_numpy(int) == 1)
+        n_hit = int(hit.sum())
+        print("anchor=%s: %d validated charts sit in a cell whose window is centred on "
+              "the AUD code that places them there" % (anchor, n_hit))
+        for s_ in (1, 2):
+            k = hit & (m["S"].to_numpy(int) == s_)
+            print("  stratum %d %-20s %3d charts, %3d reference positive"
+                  % (s_ + 1, SNAMES[s_], int(k.sum()),
+                     int(np.nansum(m["Aobs"].to_numpy(float)[k]))))
+        # They leave the validated arm and stay in the registry arm with A latent, which
+        # keeps their treatment outcome and their stratum.
+        m.loc[hit, "Aobs"] = np.nan
+        m["val"] = m["Aobs"].notna()
+        if anchor == "asuncoded":
+            # The registry patients who acquire a code after t0 are given the theta of the
+            # never-coded cell of their own stratum and period. That is a stated
+            # assumption, not a measurement: it says the later-coded patients look like the
+            # never-coded ones, which the data cannot check.
+            m.loc[m["S"] >= 1, "Uth"] = 0
+        elif anchor != "drop":
+            raise SystemExit("unknown anchor mode: %s" % anchor)
     return m
 
 
@@ -332,6 +385,13 @@ def main():
     ap.add_argument("--min-t0-year", type=int, default=0,
                     help="drop patients whose t0 falls before this year; 2016 drops the "
                          "extract-boundary cohort")
+    ap.add_argument("--anchor", default=ANCHOR_DEFAULT,
+                    choices=["keep", "drop", "asuncoded"],
+                    help="which charts define the cells whose note window follows the "
+                         "AUD code. asuncoded, the default, estimates those cells from "
+                         "the never-coded cell of the same stratum and period; keep "
+                         "estimates each cell from its own charts; drop removes the "
+                         "charts and leaves the cell on its Beta(1,1) prior")
     ap.add_argument("--u-source", default="parquet", choices=["parquet", "roster"],
                     help="which AUD-code-ever indicator defines the theta cells for "
                          "sampled patients")
@@ -340,7 +400,7 @@ def main():
 
     m = build(a.collapse, narrow=int(a.variant == "narrow_signal"),
               acamp=int(a.variant == "acamp_disulf"), ever_rx=a.ever_rx,
-              u_source=a.u_source)
+              u_source=a.u_source, anchor=a.anchor)
     if a.min_t0_year:
         before, val_before = len(m), int(m["val"].sum())
         m = m[m["t0"].dt.year >= a.min_t0_year].copy()
@@ -381,7 +441,8 @@ def main():
     # occur are given a parameter: a patient carrying an AUD code at t0 has carried one at
     # some time by definition, so that stratum has no U=0 cell in the registry or in the
     # sample.
-    key = list(zip(m["S"].to_numpy(int), m["period"].to_numpy(int), m["U"].to_numpy(int)))
+    key = list(zip(m["S"].to_numpy(int), m["period"].to_numpy(int),
+                   m["Uth"].to_numpy(int)))
     cells = sorted(set(key))
     cellmap = {c: i for i, c in enumerate(cells)}
     thidx = np.array([cellmap[k] for k in key])
@@ -390,7 +451,7 @@ def main():
     # For a registry patient theta is the U-marginal within its stratum and period, with
     # the weights taken from the registry itself, so they carry no uncertainty.
     sp = pd.DataFrame({"S": m["S"].to_numpy(int), "period": m["period"].to_numpy(int),
-                       "U": m["U"].to_numpy(int)})
+                       "U": m["Uth"].to_numpy(int)})
     frac = (sp.groupby(["S", "period"])["U"].value_counts(normalize=True)
               .rename("w").reset_index())
     Wsp = np.zeros((nS * len(M.PERIODS), nth))
@@ -553,6 +614,8 @@ def main():
         tag += "_everrx"
     if a.u_source != "parquet":
         tag += "_u" + a.u_source
+    if a.anchor != ANCHOR_DEFAULT:
+        tag += "_anchor" + a.anchor
     if a.min_t0_year:
         tag += "_t0from%d" % a.min_t0_year
     if a.outer or a.inner != 30 or a.inner_burn != 10:

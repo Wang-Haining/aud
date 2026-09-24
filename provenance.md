@@ -161,6 +161,21 @@ The information runs one way: the chart labels enter the measurement model and t
 measurement model enters the outcome model, and the treatment data never revise who
 has AUD. Extended Data Figure 1 in the paper sets this out.
 
+The treatment contrast on a time axis, Figure 2 panels d to f. Same measurement model and
+cut; the outcome is two cause-specific piecewise-exponential hazards, first treatment and
+death, among new users, censored at the end of the extract. Four chains of 1,200 outer
+iterations, one Slurm task each, excluded from `rebuild_all.sh` for the same reason as the
+registry model:
+
+```
+downstream/fig2_time_to_rx.py       the time-to-event registry model, and its summary
+downstream/npj/jobs_fig2_time.sh    one chain per task, both censoring rules
+downstream/npj/f02_time_figure.py   a proof of the three time panels
+```
+
+The printed panels are drawn by producers kept with the manuscript, from the aggregate
+table `fig2_time_to_rx.py --summarise 1` writes.
+
 ### Figure 3 — model choice, prompt wording, and grounding
 
 ```
@@ -184,6 +199,26 @@ downstream/npj/panel_supp_reader_swarm.py      the specificity half, Supplementa
 downstream/npj/f04_supp_documentation.py       Supplementary Figure 3
 downstream/npj/f04_supp_tables.py              the LaTeX bodies of the subgroup tables
 ```
+
+The registry-scale panel of Figure 4, the code's sensitivity by subgroup against the rest of
+its axis, and Supplementary Table 14:
+
+```
+downstream/icd_fairness.py                     theta by subgroup and stratum, and its bootstrap
+downstream/cci_fairness.py                     the same on the Charlson axis
+downstream/npj/f04_sdi.py                      the neighbourhood deprivation axis
+downstream/npj/f04_registry_disparity.py       each stratum's ratio to the rest, with intervals
+downstream/npj/f04_registry_burden_subgroup.py how many patients with AUD each stratum leaves uncoded
+downstream/npj/panel_registry_disparity.py     draws the panel
+```
+
+Until 24 September 2026 these took theta as the plain mean of the validated charts in a
+cell. The charts were drawn stratified on whether an AUD code ever appears, and the
+coded-later patients were oversampled, so that overstated theta: the subgroup analysis
+implied 4,919 uncoded patients with AUD where the registry model gives 3,261.
+`icd_fairness.theta_frame` now takes theta in the two strata without an AUD code at the
+cirrhosis diagnosis from never-coded charts, as the registry model does, and
+`resample_design` resamples within code stratum and sampling status.
 
 `f06_subgroup_frame.py` runs before the analysis, not after, and decides which
 subgroups the sample can answer at all. A subgroup it rules out is reported as
@@ -218,7 +253,8 @@ cd downstream && python3 -c "import stats_core; stats_core._selftest()"
 ```
 
 What is in it: Cohen's and linear- and quadratic-weighted kappa, Gwet's AC1, Wilson
-intervals, percentile and paired bootstrap, McNemar with continuity correction,
+intervals, percentile and paired bootstrap, McNemar (exact below 25 discordant pairs,
+continuity-corrected above; `mcnemar_counts` for a caller holding only the 2x2 table),
 DeLong, Benjamini–Hochberg, and the subgroup parity table.
 
 Two conventions worth knowing before reading any number:

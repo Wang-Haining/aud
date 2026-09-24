@@ -201,6 +201,25 @@ def kappa_ci(y_true, y_pred, labels, weights="linear",
 # Paired tests (same patients rated by two methods vs a reference)
 # ---------------------------------------------------------------------------
 
+def mcnemar_counts(b: int, c: int, exact_threshold: int = 25) -> dict:
+    """The paired test on discordant counts alone, for callers that hold a 2x2 table.
+
+    b = (A correct, B wrong), c = (A wrong, B correct). Exact binomial when b + c is below
+    exact_threshold; chi-square with continuity correction otherwise. Fig. 1e used to
+    compute the chi-square itself for both comparisons, which reported a chi-square for
+    the 16 discordant charts of the LLM against the hepatologist where this rule gives the
+    exact test."""
+    n_disc = b + c
+    if n_disc == 0:
+        return {"statistic": 0.0, "p_value": 1.0, "method": "none", "n_disc": 0}
+    if n_disc < exact_threshold:
+        return {"statistic": float(min(b, c)), "p_value": float(binomtest(b, n_disc, 0.5).pvalue),
+                "method": "exact", "n_disc": n_disc}
+    stat = (abs(b - c) - 1) ** 2 / n_disc
+    return {"statistic": float(stat), "p_value": float(chi2.sf(stat, 1)),
+            "method": "chi2_cc", "n_disc": n_disc}
+
+
 def mcnemar(reference, pred_a, pred_b, exact_threshold: int = 25) -> dict:
     """McNemar test comparing two raters' *correctness* against a reference on the
     SAME patients — the right test for "is the LLM more accurate than ICD?".
@@ -211,20 +230,9 @@ def mcnemar(reference, pred_a, pred_b, exact_threshold: int = 25) -> dict:
     b_ok = np.asarray([p == r for p, r in zip(pred_b, reference)])
     b = int(np.sum(a_ok & ~b_ok))
     c = int(np.sum(~a_ok & b_ok))
-    n_disc = b + c
-    if n_disc == 0:
-        return {"b": b, "c": c, "statistic": 0.0, "p_value": 1.0,
-                "acc_a": float(a_ok.mean()), "acc_b": float(b_ok.mean()), "method": "none"}
-    if n_disc < exact_threshold:
-        p = binomtest(b, n_disc, 0.5).pvalue
-        stat = float(min(b, c))
-        method = "exact"
-    else:
-        stat = (abs(b - c) - 1) ** 2 / n_disc
-        p = float(chi2.sf(stat, 1))
-        method = "chi2_cc"
-    return {"b": b, "c": c, "statistic": float(stat), "p_value": float(p),
-            "acc_a": float(a_ok.mean()), "acc_b": float(b_ok.mean()), "method": method}
+    r = mcnemar_counts(b, c, exact_threshold)
+    return {"b": b, "c": c, "statistic": r["statistic"], "p_value": r["p_value"],
+            "acc_a": float(a_ok.mean()), "acc_b": float(b_ok.mean()), "method": r["method"]}
 
 
 def _midrank(x: np.ndarray) -> np.ndarray:

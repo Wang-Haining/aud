@@ -34,6 +34,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, "downstream")
 sys.path.insert(0, str(HERE))
 
+sys.path.insert(0, "downstream")
+import stats_core as SCORE  # noqa: E402
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                                     # noqa: E402
@@ -118,6 +120,14 @@ def estimates(sc):
     return pd.DataFrame(rows)
 
 
+def test_label(t):
+    """The paired test as the panel prints it: chi-square where the rule uses it, else the
+    exact P."""
+    if t["method"] == "chi2_cc":
+        return "$\\chi^2$ = %.1f" % t["statistic"]
+    return "exact $P$ = %.2f" % t["p_value"]
+
+
 def discordance(sc):
     """The full two-by-two of who was right, for each comparator."""
     out = {}
@@ -128,8 +138,8 @@ def discordance(sc):
         mat = np.array([[int((mok & ook).sum()), int((mok & ~ook).sum())],
                         [int((~mok & ook).sum()), int((~mok & ~ook).sum())]])
         disagree = int(mat[0, 1] + mat[1, 0])
-        chi = ((abs(mat[0, 1] - mat[1, 0]) - 1) ** 2 / disagree) if disagree else np.nan
-        out[other] = {"mat": mat, "n": len(both), "disagree": disagree, "chi2": chi}
+        test = SCORE.mcnemar_counts(int(mat[0, 1]), int(mat[1, 0]))
+        out[other] = {"mat": mat, "n": len(both), "disagree": disagree, "test": test}
     return out
 
 
@@ -249,8 +259,7 @@ def draw_panel_e(axes, disc):
         ax.set_ylabel("LLM", fontsize=5.6, color=PA.C_POS)
         # Two short lines. The earlier single long line ran past its own axes and met
         # the neighbouring panel's title in the gutter; the verdict moves to the caption.
-        ax.set_title("%d of %d disagree\n$\\chi^2$ = %.1f"
-                     % (d["disagree"], d["n"], d["chi2"]),
+        ax.set_title("%d of %d disagree\n%s" % (d["disagree"], d["n"], test_label(d["test"])),
                      fontsize=5.0, color=PA.MUTED, loc="center", pad=3.0)
     return axes
 
@@ -428,9 +437,9 @@ def main():
     for other in (CODE, FELLOW):
         d = disc[other]
         print("  instrument vs %-18s both right %3d, ours only %3d, theirs only %3d, "
-              "both wrong %3d   chi2 %.1f"
+              "both wrong %3d   %s"
               % (NAME[other], d["mat"][0, 0], d["mat"][0, 1], d["mat"][1, 0],
-                 d["mat"][1, 1], d["chi2"]))
+                 d["mat"][1, 1], test_label(d["test"])))
 
     apply_nature_style()
     fig = plt.figure(figsize=(7.205, 2.55))
