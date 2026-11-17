@@ -45,9 +45,11 @@ OUT = "output/fig6_registry"
 MIN_DATE = pd.Timestamp("2005-01-01")
 AUD_CODE = r"^(F10|303|305\.0)"
 CIRR_CODE = r"^(K70|K74|571)"
-ALC_SIGNAL = (r"^(K70|571\.0|571\.1|571\.2|571\.3|K85\.2|577\.0|G62\.1|357\.5|"
-              r"I42\.6|425\.5|K29\.2|535\.3|E24\.4|291|E52|265\.2|T51|980|Z71\.4|Z72\.1|"
-              r"V11\.3|V79\.1|F10)")
+# Alcohol-specific codes only: 577.0 (acute pancreatitis of any cause), pellagra (E52, 265.2), the T51/980 codes
+# for alcohols other than ethanol, Z72.1 and V79.1 are not in the set.
+ALC_SIGNAL = (r"^(K70|571\.0|571\.1|571\.2|571\.3|K85\.2|G62\.1|357\.5|"
+              r"I42\.6|425\.5|K29\.2|535\.3|E24\.4|291|T51\.?0|T51\.?9|980\.?0|980\.?9|Z71\.4|"
+              r"V11\.3|F10)")
 AUD_DRUGS = {1714319, 19043959, 735850}
 EXCLUDE_DRUG = {909841}
 POS = {"definitely yes", "probably yes"}

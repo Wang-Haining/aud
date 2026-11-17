@@ -320,13 +320,13 @@ it with the two-column version.
 **The language model, and how it was run.** No part of the extraction is in this
 repository: not the serving configuration, not the client, not the batching. The
 phenotyping skill itself — the instructions the model was given — is printed verbatim
-in Supplementary Note 1 of the paper and released alongside it, which is the artefact
+in Supplementary Note 3 of the paper and released alongside it, which is the artefact
 a reader needs to rebuild the phenotype elsewhere.
 
 **The chart-review application.** The web application the hepatologists used carries
 authentication and administrative logic and produces no number in the paper. How the
 reference standard was built, including both triggers for a second reading, is
-Supplementary Figure 2.
+Extended Data Fig. 2.
 
 **The data.** Rating files, the patient roster, the linkage tables, the note extract.
 The paths appear in the code, because removing them would make the code unreadable;

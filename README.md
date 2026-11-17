@@ -15,7 +15,7 @@ the checks that hold the paper to them.
 
 Not here: the language model and how it was run, and the chart-review application. The
 phenotyping instructions given to the model are printed verbatim in Supplementary
-Note 1 of the paper.
+Note 3 of the paper.
 
 ## Layout
 
